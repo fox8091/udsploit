@@ -4,6 +4,8 @@
 
 #include <3ds.h>
 
+#include "udsploit.h"
+
 Result svcMiniBackdoor(void* target);
 void invalidate_icache();
 
@@ -37,7 +39,7 @@ Result initial_kernel_function(u32 garbage)
 	return 0;
 }
 
-Result hook_kernel()
+Result __hook_kernel()
 {
 	Result ret = -200;
 	const u32 wram_size = 0x00080000;
@@ -85,8 +87,6 @@ Result hook_kernel()
 				break;
 			}
 		}
-
-		printf("found svc_stuff %08X %08X %08X\n", (unsigned int)svc_handler_offset, (unsigned int)svc_table_offset, (unsigned int)svc_ac_offset);
 	}
 
 	ret = -201;
@@ -107,13 +107,10 @@ Result hook_kernel()
 				break;
 			}
 		}
-		printf("found svc_0x30_offset %08X\n", (unsigned int)svc_0x30_offset);
 	}
 
 	ret = -202;
 	if(!svc_0x30_offset) goto sub_fail;
-
-	printf("patching kernel... ");
 
 	// now we patch local svc 0x30 with "bx r0"
 	wram_buffer[svc_0x30_offset / 4] = 0xE12FFF10;
@@ -144,7 +141,6 @@ Result hook_kernel()
 	// this will also invalidate all icache which will allow us to use svcBackdoor
 	while(svcMiniBackdoor(initial_kernel_function));
 
-	printf("done !\n");
 	ret = 0;
 
 	sub_fail:
